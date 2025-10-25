@@ -54,6 +54,38 @@ class Paraxial:
         self.optic = optic
         self._ray_tracer = ParaxialRayTracer(self.optic)
 
+    def _has_internal_focus_point(self, y):
+        y_signs = be.sign(y)
+
+        # Assumption - paraxial ray tracing will always use positive y:
+        y_signs[y_signs == 0] = 1
+        has_internal_focus_point = be.count_nonzero(be.diff(y_signs.reshape(1, -1))) > 0
+        return has_internal_focus_point
+
+    def _determine_sign(self, y, u) -> be.array:
+        """Determine the effective sign to be used with the slope u."""
+        if y[-1] == 0:  # At the focus
+            return be.sign(u[-1])
+
+        if y[-1] > 0:
+            if u[-1] < 0:
+                return be.array([-1])  # Positive focus, outside system
+            else:
+                return (
+                    be.array([1])
+                    if self._has_internal_focus_point(y)
+                    else be.array([-1])
+                )
+        if y[-1] < 0:
+            if u[-1] > 0:
+                return be.array([1])  # Positive focus, outside system
+            else:
+                return (
+                    be.array([-1])
+                    if self._has_internal_focus_point(y)
+                    else be.array([1])
+                )
+
     @property
     def surfaces(self) -> SurfaceGroup:
         """SurfaceGroup: the surface group of the optical system."""
@@ -69,7 +101,8 @@ class Paraxial:
         z_start = -1
         wavelength = self.optic.primary_wavelength
         y, u = self._trace_generic(1.0, 0.0, z_start, wavelength, reverse=True)
-        f1 = y[0] / u[-1]
+        sign = self._determine_sign(y, u)
+        f1 = -y[0] * sign / u[-2]
         return f1[0]
 
     def f2(self) -> ScalarOrArray:
@@ -83,8 +116,9 @@ class Paraxial:
         z_start = self.surfaces.positions[1] - 1
         wavelength = self.optic.primary_wavelength
         y, u = self._trace_generic(1.0, 0.0, z_start, wavelength)
-        f2 = -y[0] / u[-1]
-        return be.abs(f2[0])
+        sign = self._determine_sign(y, u)
+        f2 = y[0] * sign / u[-2]
+        return f2[0]
 
     def F1(self) -> ScalarOrArray:
         """Calculate the front focal point (F1) location.
