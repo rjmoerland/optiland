@@ -860,3 +860,83 @@ def test_compound_lens(n1, n2, n3, f1, f2, d, set_test_backend):
         [cl.F1, cl.F2, cl.f1, cl.f2, cl.PP1, cl.PP2],
         [px.F1(), px.F2(), px.f1(), px.f2(), px.P1(), px.P2()],
     )
+
+
+class Mirror:
+    """Simple class to describe a mirror, uses sign convention as in JAMES P. C.
+    SOUTHALL, MIRRORS, PRISMS AND LENSES, THE MACMILLAN COMPANY, 1918"""
+    r: float
+
+    def __init__(self, r: float, n: float) -> None:
+        self.r = r
+        self.n = n
+    @property
+    def P(self) -> float:
+        # Sign convention as in source
+        return -2 * self.n / self.r
+
+
+class ThickMirror:
+    """Class to describe a 'Thick Mirror', a mirror with a lens in front of it. The
+    light passes back and forth through the lens after reflecting in the mirror. The
+    formula for the effective power of the system is described in JAMES P. C. SOUTHALL,
+    MIRRORS, PRISMS AND LENSES, THE MACMILLAN COMPANY, 1918, p. 379."""
+    lens: ThickLens
+    mirror: Mirror
+
+    def __init__(self, lens: ThickLens, mirror: Mirror, d: float) -> None:
+        self.lens = lens
+        self.mirror = mirror
+        self.d = d
+
+    @property
+    def _c(self) -> float:
+        return (self.d - self.lens.PP2) / self.lens.n3
+
+    @property
+    def P(self) -> float:
+        c = self._c
+        P1 = self.lens.P
+        P2 = self.mirror.P
+        return (1 - c * P1) * (2 * P1 + P2 - c * P1 * P2)
+
+@pytest.mark.parametrize("n1", [1.0, 1.33])
+@pytest.mark.parametrize("n2", [1.5, 2.0])
+@pytest.mark.parametrize("n3", [1.0, 1.33])
+@pytest.mark.parametrize("r1", [100, -50])
+@pytest.mark.parametrize("r2", [50, -100])
+@pytest.mark.parametrize("rm", [250, -100])
+@pytest.mark.parametrize("d1", [1.0, 5.0])
+@pytest.mark.parametrize("d2", [5.0,10])
+def test_thick_mirror(n1, n2, n3, r1, r2, rm, d1, d2):
+    thick_lens = ThickLens(n1, n2, n3, r1, r2, d1)
+    mirror = Mirror(rm, n3)
+    thick_mirror = ThickMirror(thick_lens, mirror, d2)
+    lens = Optic()
+
+    lens.add_surface(
+        index=0, radius=be.inf, thickness=be.inf, material=IdealMaterial(n1)
+    )
+    lens.add_surface(
+        index=1, radius=r1, thickness=d1, is_stop=True, material=IdealMaterial(n2)
+    )
+    lens.add_surface(
+        index=2, radius=r2, thickness=d2, is_stop=False, material=IdealMaterial(n3)
+    )
+    lens.add_surface(
+        index=3, radius=rm, thickness=-d2, is_stop=False, material="mirror"
+    )
+    lens.add_surface(
+        index=4, radius=r2, thickness=-d1, is_stop=False, material=IdealMaterial(n2)
+    )
+    lens.add_surface(
+        index=5, radius=r1, thickness=0.0, is_stop=False, material=IdealMaterial(n1)
+    )
+    lens.add_surface(index=lens.surface_group.num_surfaces, material=IdealMaterial(n1))
+    lens.set_aperture(aperture_type="float_by_stop_size", value=5)
+    lens.add_field(0.0)
+    lens.set_field_type("angle")
+    lens.add_wavelength(value=0.55, is_primary=True)
+
+    # Adjust sign to account for sign convention in source:
+    assert -n1 / thick_mirror.P == pytest.approx(lens.paraxial.f2())
