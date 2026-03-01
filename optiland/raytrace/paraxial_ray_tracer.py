@@ -101,6 +101,7 @@ class ParaxialRayTracer:
 
         heights = []
         slopes = []
+        backward_propagating = False
 
         for k in range(skip, len(R)):
             if isinstance(surfs[k], ObjectSurface):
@@ -116,13 +117,16 @@ class ParaxialRayTracer:
             # reflect or refract
             if surfs[k].interaction_model.is_reflective:
                 if surfs[k].surface_type == "paraxial":
-                    f = surfs[k].interaction_model.f
+                    f = surfs[k].interaction_model.f * (-1 if reverse else 1)
                     u_ = -u_ - y_ / f
                 else:
                     u_ = -u_ - 2 * y_ / R[k]
+                backward_propagating = not backward_propagating
             else:
                 if surfs[k].surface_type == "paraxial":
-                    f = surfs[k].interaction_model.f
+                    f = surfs[k].interaction_model.f * (
+                        -1 if backward_propagating else 1
+                    )
                     u_ = (n[k - 1] * u_ - y_ / f) / n[k]
                 else:
                     u_ = (n[k - 1] * u_ - y_ * power[k]) / n[k]
