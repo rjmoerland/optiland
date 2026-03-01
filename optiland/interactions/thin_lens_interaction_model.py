@@ -72,17 +72,18 @@ class ThinLensInteractionModel(BaseInteractionModel):
 
         n1 = self.material_pre.n(rays.w)
 
-        n2 = -n1 if self.is_reflective else self.material_post.n(rays.w)
+        n2 = n1 if self.is_reflective else self.material_post.n(rays.w)
 
-        ux1 = rays.L / rays.N
-        uy1 = rays.M / rays.N
+        ux1 = rays.L / be.abs(rays.N)
+        uy1 = rays.M / be.abs(rays.N)
 
         ux2 = 1 / n2 * (n1 * ux1 - rays.x / self.f)
         uy2 = 1 / n2 * (n1 * uy1 - rays.y / self.f)
 
         L = ux2
         M = uy2
-
+        N = be.copysign(be.ones_like(rays.N), rays.N)
+        
         # only normalize if required
         if self.bsdf or self.coating or isinstance(rays, PolarizedRays):
             rays.normalize()
@@ -105,9 +106,12 @@ class ThinLensInteractionModel(BaseInteractionModel):
             rays.update()
 
         # paraxial approximation -> direction is not necessarily unit vector
+        if self.is_reflective:
+            N = -N
         rays.L = L
         rays.M = M
-        rays.N = be.copysign(be.ones_like(rays.N), rays.N)
+        rays.N = N
+
         rays.is_normalized = False
 
         return rays
